@@ -219,7 +219,7 @@ const main = async () => {
       return
     }
 
-    const user = await findUserByToken(token)
+    const user = await findUserByToken(token, true)
     if (isNull(user)) {
       res.send({
         'status': 'error',
@@ -277,7 +277,7 @@ const main = async () => {
       return
     }
 
-    const user = await findUserByToken(token)
+    const user = await findUserByToken(token, true)
     if (isNull(user)) {
       res.send({
         'status': 'error',
