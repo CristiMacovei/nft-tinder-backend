@@ -115,6 +115,13 @@ const main = async () => {
     console.log('a pornit artifica')
   })
 
+
+  app.get('/', (res, res) => {
+    res.json({
+      'message': 'Hello World'
+    })
+  })
+
   app.post('/signup', async (req, res) => {
     const username = req.body.username
     if (isNullOrEmptyString(username)) {
