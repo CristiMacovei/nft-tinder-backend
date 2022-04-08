@@ -116,7 +116,7 @@ const main = async () => {
   })
 
 
-  app.get('/', (res, res) => {
+  app.get('/', (req, res) => {
     res.json({
       'message': 'Hello World'
     })
