@@ -5,12 +5,8 @@ const express = require('express')
 const cors = require('cors')
 const sha256 = require('crypto-js/sha256')
 const multer = require('multer');
-const { memoryStorage } = require('multer')
 const fs = require('fs')
-
-// const upload = multer({
-//   storage: multer.memoryStorage()
-// });
+const { AppConfig } = require('aws-sdk')
 
 const upload = multer({
   dest: './uploads/',
@@ -101,6 +97,66 @@ const findUserByToken = (token, shouldBeVerified = false) => {
   return User.findOne({
     where: query
   })
+}
+
+const listAllObjectsFromS3 = async (prefix) => {
+  let isTruncated = true
+  let marker = null
+  let objects = []
+
+  while (isTruncated) {
+    let params = {
+      Bucket: process.env.BUCKET_NAME,
+      MaxKeys: 1000
+    }
+
+    if (prefix) {
+      params.Prefix = prefix
+    }
+
+    if (marker) {
+      params.Marker = marker
+    }
+
+    try {
+      const response = await s3.listObjectsV2(params).promise()
+
+      objects = objects.concat(response.Contents)
+
+      isTruncated = response.IsTruncated
+      if (isTruncated) {
+        marker = response.NextMarker
+      }
+    } catch (err) {
+      console.log(err)
+    }
+
+    return objects
+  }
+}
+
+const emptyS3Directory = async (dir) => {
+  const listParams = {
+      Bucket: process.env.BUCKET_NAME,
+      Prefix: dir
+  };
+
+  const listedObjects = await s3.listObjectsV2(listParams).promise();
+
+  if (listedObjects.Contents.length === 0) return;
+
+  const deleteParams = {
+      Bucket: process.env.BUCKET_NAME,
+      Delete: { Objects: [] }
+  };
+
+  listedObjects.Contents.forEach(({ Key }) => {
+      deleteParams.Delete.Objects.push({ Key });
+  });
+
+  await s3.deleteObjects(deleteParams).promise();
+
+  if (listedObjects.IsTruncated) await emptyS3Directory(bucket, dir);
 }
 
 const main = async () => {
@@ -239,11 +295,57 @@ const main = async () => {
       return
     }
 
-    let id = user.numImagesUploaded + 1
+    const activeContent = (await s3.listObjectsV2({
+      Bucket: process.env.BUCKET_NAME,
+      Prefix: `root-${user.id}/active/${file.originalname}`
+    }).promise()).Contents
+
+    if (!isNull(activeContent) && activeContent.length !== 0) {
+      fs.unlinkSync(file.path)
+      
+      res.json({
+        'status': 'error',
+        'message': 'file already exists'
+      })
+
+      return
+    }
+
+    const deletedContent = (await s3.listObjectsV2({
+      Bucket: process.env.BUCKET_NAME,
+      Prefix: `root-${user.id}/discarded/${file.originalname}`
+    }).promise()).Contents
+
+    if (!isNull(deletedContent) && deletedContent.length !== 0) {
+      fs.unlinkSync(file.path)
+      
+      res.json({
+        'status': 'error',
+        'message': 'file already exists'
+      })
+
+      return
+    }
+
+    const likedContent = (await s3.listObjectsV2({
+      Bucket: process.env.BUCKET_NAME,
+      Prefix: `root-${user.id}/kept/${file.originalname}`
+    }).promise()).Contents
+
+    if (!isNull(likedContent) && likedContent.length !== 0) {
+      fs.unlinkSync(file.path)
+      
+      res.json({
+        'status': 'error',
+        'message': 'file already exists'
+      })
+
+      return
+    }
 
     s3.upload({
       Bucket: process.env.BUCKET_NAME,
-      Key: `root-${user.id}/active/${id}.png`,
+      Key: `root-${user.id}/active/${file.originalname}`,
       Body: fs.readFileSync(file.path)
     }, async (err, data) => {
       fs.unlinkSync(file.path)
@@ -257,7 +359,7 @@ const main = async () => {
         return
       }
 
-      user.numImagesUploaded = id
+      user.numImagesUploaded++
       await user.save()
 
       res.send({
@@ -266,6 +368,7 @@ const main = async () => {
     })
   })
 
+  /*
   app.post('/multi-upload', upload.array('files'), async (req, res) => {
     const token = req.headers.authorization
     if (isNullOrEmptyString(token)) {
@@ -328,6 +431,7 @@ const main = async () => {
       'failed': failedToUpload,
     })
   })
+  */
 
   app.get('/verify', async (req, res) => {
     const token = req.headers.authorization
@@ -435,7 +539,11 @@ const main = async () => {
         const b64 = Buffer.from(data.Body).toString('base64')
         const mimeType = 'image/jpeg'
         
-        res.send(`<img src="data:${mimeType};base64,${b64}" />`)
+        res.json({
+          'status': 'success',
+          'image': `<img class="rounded-3xl" src="data:${mimeType};base64,${b64}" />`,
+          'name': key.substring(key.lastIndexOf('/') + 1)
+        })
       })
     })
   })
@@ -623,7 +731,77 @@ const main = async () => {
   })
 
   app.get('/stats', async (req, res) => {
-    // todo implement
+    const token = req.headers.authorization
+    if (typeof token === 'undefined' || token === null || token.length === 0) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    const userByToken = await User.findOne({
+      where: {
+        token
+      }
+    })
+
+    if (userByToken === null) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    const active = await listAllObjectsFromS3('root-' + userByToken.id + '/active/')
+    const discarded = await listAllObjectsFromS3('root-' + userByToken.id + '/discarded/')
+    const kept = await listAllObjectsFromS3('root-' + userByToken.id + '/kept/')
+
+    res.json({
+      status: 'success',
+      data: {
+        active: active.length,
+        discarded: discarded.length,
+        kept: kept.length
+      }
+    })
+  })
+
+  // todo test this shit
+  app.post('/delete', async (req, res) => {
+    const token = req.headers.authorization
+    if (typeof token === 'undefined' || token === null || token.length === 0) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    const userByToken = await User.findOne({
+      where: {
+        token
+      }
+    })
+
+    if (userByToken === null) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    await emptyS3Directory('root-' + userByToken.id + '/')
+
+    res.json({
+      status: 'success'
+    })
   })
 }
 
