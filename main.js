@@ -488,6 +488,8 @@ const main = async () => {
         'status': 'error',
         'message': 'invalid target token'
       })
+
+      return
     }
 
     targetUser.set({
