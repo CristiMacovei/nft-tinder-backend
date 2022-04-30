@@ -264,6 +264,33 @@ const main = async () => {
     })
   })
 
+  app.get('/test-admin', async (req, res) => {
+    const token = req.headers.authorization
+    if (isNullOrEmptyString(token)) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    const user = await findUserByToken(token, true)
+    if (isNull(user)) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    res.json({
+      'status': 'success',
+      'admin': user.isAdmin
+    })
+  })
+
   app.post('/upload', upload.single('file'), async (req, res) => {
     const token = req.headers.authorization
     if (isNullOrEmptyString(token)) {
@@ -433,7 +460,7 @@ const main = async () => {
   })
   */
 
-  app.get('/verify', async (req, res) => {
+  app.post('/verify', async (req, res) => {
     const token = req.headers.authorization
     if (isNullOrEmptyString(token)) {
       res.send({
@@ -454,7 +481,7 @@ const main = async () => {
       return
     }
 
-    const targetToken = req.query.targetToken
+    const targetToken = req.body.targetToken
     const targetUser = await findUserByToken(targetToken)
     if (isNull(targetUser)) {
       res.send({
@@ -541,7 +568,7 @@ const main = async () => {
         
         res.json({
           'status': 'success',
-          'image': `<img class="rounded-3xl" src="data:${mimeType};base64,${b64}" />`,
+          'image': `<img class="rounded-3xl" style="max-height: 100%" src="data:${mimeType};base64,${b64}" />`,
           'name': key.substring(key.lastIndexOf('/') + 1)
         })
       })
