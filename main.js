@@ -6,7 +6,6 @@ const cors = require('cors')
 const sha256 = require('crypto-js/sha256')
 const multer = require('multer');
 const fs = require('fs')
-const { AppConfig } = require('aws-sdk')
 
 const upload = multer({
   dest: './uploads/',
@@ -799,7 +798,50 @@ const main = async () => {
     })
   })
 
-  // todo test this shit
+  app.get('/csv', async (req, res) => {
+    const token = req.headers.authorization
+    if (typeof token === 'undefined' || token === null || token.length === 0) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    const userByToken = await User.findOne({
+      where: {
+        token
+      }
+    })
+
+    if (userByToken === null) {
+      res.send({
+        'status': 'error',
+        'message': 'invalid token'
+      })
+
+      return
+    }
+
+    const active = await listAllObjectsFromS3('root-' + userByToken.id + '/active/')
+    const discarded = await listAllObjectsFromS3('root-' + userByToken.id + '/discarded/')
+    const kept = await listAllObjectsFromS3('root-' + userByToken.id + '/kept/')
+
+    let rows = [
+      ['filename', 'status']
+    ]
+
+    rows = rows.concat(Array.from(kept).map(i => [i.Key.substring(i.Key.indexOf('/kept/') + '/kept/'.length) ,'liked']))
+    rows = rows.concat(Array.from(discarded).map(i => [i.Key.substring(i.Key.indexOf('/discarded/') + '/discarded/'.length) ,'discarded']))
+    rows = rows.concat(Array.from(active).map(i => [i.Key.substring(i.Key.indexOf('/active/') + '/active/'.length) ,'unsorted']))
+
+    res.json({
+      status: 'success',
+      csv: `data:text/csv;charset=utf-8,${rows.map(r => r.join(',')).join('\n')}`
+    })
+  })
+
   app.post('/delete', async (req, res) => {
     const token = req.headers.authorization
     if (typeof token === 'undefined' || token === null || token.length === 0) {
