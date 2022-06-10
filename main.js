@@ -228,7 +228,7 @@ const main = async () => {
   })
 
   app.post('/login', async (req, res) => {
-    console.log(`Incoming request on /signup: ${req.body.username}, ${req.body.password}`)
+    console.log(`Incoming request on /login: ${req.body.username}, ${req.body.password}`)
 
     const username = req.body.username 
     if (isNullOrEmptyString(username)) {
@@ -295,7 +295,7 @@ const main = async () => {
   })
 
   app.post('/upload', upload.single('file'), async (req, res) => {
-    console.log(`Incoming request on /upload: ${req.body.authorization} wants to upload ${req.file.originalname}`)
+    console.log(`Incoming request on /upload: ${req.headers.authorization} wants to upload ${req.file.originalname}`)
 
     const token = req.headers.authorization
     if (isNullOrEmptyString(token)) {
