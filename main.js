@@ -178,11 +178,13 @@ const main = async () => {
   })
 
   app.post('/signup', async (req, res) => {
+    console.log(`Incoming request on /signup: ${req.body.username}, ${req.body.password}`)
+
     const username = req.body.username
     if (isNullOrEmptyString(username)) {
       res.send({
         'status': 'error',
-        'message': 'invalid token'
+        'message': 'invalid username'
       })
 
       return
@@ -192,7 +194,7 @@ const main = async () => {
     if (isNullOrEmptyString(password)) {
       res.send({
         'status': 'error',
-        'message': 'invalid token'
+        'message': 'invalid password'
       })
 
       return
@@ -203,13 +205,11 @@ const main = async () => {
     if (!isNull(alreadyExistingUser)) {
       res.send({
         'status': 'error',
-        'message': 'already existing'
+        'message': 'acc already existing'
       })
 
       return
     }
-
-    console.log('ce face cainele')
 
     const token = sha256(username + "." + password + "@" + Date.now().toString()).toString()
 
@@ -219,6 +219,8 @@ const main = async () => {
       token
     })
 
+    console.log(`New account created for '${username}' with '${password}' and token '${token}'`)
+
     res.json({
       'status': 'success',
       'user': newUser
@@ -226,6 +228,8 @@ const main = async () => {
   })
 
   app.post('/login', async (req, res) => {
+    console.log(`Incoming request on /signup: ${req.body.username}, ${req.body.password}`)
+
     const username = req.body.username 
     if (isNullOrEmptyString(username)) {
       res.send({
@@ -291,6 +295,8 @@ const main = async () => {
   })
 
   app.post('/upload', upload.single('file'), async (req, res) => {
+    console.log(`Incoming request on /upload: ${req.body.authorization} wants to upload ${req.file.originalname}`)
+
     const token = req.headers.authorization
     if (isNullOrEmptyString(token)) {
       res.send({
@@ -321,6 +327,8 @@ const main = async () => {
       return
     }
 
+    console.log(`Checks passed: uploading ${file.originalname} to S3`)
+
     const activeContent = (await s3.listObjectsV2({
       Bucket: process.env.BUCKET_NAME,
       Prefix: `root-${user.id}/active/${file.originalname}`
@@ -336,6 +344,7 @@ const main = async () => {
 
       return
     }
+    console.log('Not found in active content')
 
     const deletedContent = (await s3.listObjectsV2({
       Bucket: process.env.BUCKET_NAME,
@@ -352,6 +361,7 @@ const main = async () => {
 
       return
     }
+    console.log('Not found in deleted content')
 
     const likedContent = (await s3.listObjectsV2({
       Bucket: process.env.BUCKET_NAME,
@@ -368,6 +378,7 @@ const main = async () => {
 
       return
     }
+    console.log('Not found in saved content')
 
     s3.upload({
       Bucket: process.env.BUCKET_NAME,
